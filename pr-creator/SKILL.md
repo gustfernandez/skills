@@ -1,0 +1,228 @@
+---
+name: pr-creator
+description: Use after /reviewer passes (.review-passed marker exists) to stage, commit, push, create a PR, and request Copilot as reviewer. Pass --auto-merge to enable squash auto-merge. Also supports manual mode (--manual --type <T> --description <D> [--scope <S>] [--notion <X>]) without requiring a .review-passed marker. All naming, labeling, and reviewer rules defer to ~/.claude/skills/conventions/pr.md. Works in any repository except the multiplica monorepo (use multiplica-pr-creator there).
+model: sonnet
+---
+
+# pr-creator
+
+## Overview
+
+Bridges the gap between a clean reviewer pass and an open PR. In one shot:
+
+1. Verifies `.review-passed` exists (plan-mode gate — skipped in manual mode).
+2. Creates a feature branch if currently on the default branch.
+3. Stages the Critical files from the active plan (plan-mode) or `git diff --cached` (manual mode), commits, and pushes.
+4. Creates a GitHub PR with title and body per `~/.claude/skills/conventions/pr.md`.
+5. Detects frontend/backend/fullstack from the diff and applies the matching label.
+6. Requests Copilot as reviewer.
+7. If `--auto-merge` was passed, enables squash auto-merge.
+8. Deletes `.review-passed` and exits the worktree if running inside one.
+
+**Invoking this skill is the explicit user approval** for the commit + push that `executor` deferred. Only invoke when you want to ship the current state.
+
+## Inputs
+
+- **`--auto-merge`** (optional) — enable squash auto-merge after PR creation.
+- **`--manual`** — skip the `.review-passed` gate and derive context from flags instead of the active plan.
+- **`--type <type>`** (manual mode) — Conventional Commits type: `feat | fix | refactor | chore | docs | test | ci`.
+- **`--description <desc>`** (manual mode) — short description (becomes the commit + PR title description).
+- **`--scope <scope>`** (manual mode, optional) — app or domain scope; omit if unclear.
+- **`--notion <URL-or-ID>`** (manual mode, optional) — Notion card URL or bare ID (e.g. `MLTPB-17`).
+
+## Workflow
+
+### Step 1 — Gate
+
+**Plan-mode** (default):
+```bash
+ls .claude/.review-passed
+```
+If the file is missing:
+```
+Blocked: .claude/.review-passed not found.
+Run /reviewer first. The commit gate requires a clean reviewer pass.
+```
+Stop. Do not proceed.
+
+**Manual mode** (`--manual` flag present): skip the gate entirely.
+
+### Step 2 — Resolve context
+
+**Plan-mode:**
+Read the most recently modified plan in `~/.claude/plans/` (or the plan passed as argument). Extract:
+- **Plan title** (first `#` heading) → commit message + PR title.
+- **Context section** → PR body summary + Notion card extraction.
+- **Critical files table** → exact set of files to stage.
+- **Verification section** → Test plan bullets in PR body.
+- **Commit type** → infer from plan title (`feat` / `fix` / `refactor` / `chore` / `docs` / `test` / `ci`).
+- **Scope** → infer from the app or domain name in the plan title (omit if unclear).
+
+If no plan is found, fall back to manual-mode behavior.
+
+**Manual mode:**
+- Type, description, scope from CLI flags.
+- Files to stage: `git diff --cached` if anything is staged; otherwise `git diff` (unstaged).
+- Summary bullets: derive from the description (single bullet is fine).
+- Test plan: a GitHub task list of the checks you actually ran, e.g. `- [x] Verified locally.` (see conventions — run before opening, open with boxes checked).
+
+**Notion extraction (both modes):**
+Parse the plan Context or `--notion` flag per `~/.claude/skills/conventions/pr.md` — Notion card patterns in priority order:
+1. `**Notion card:** <URL>`
+2. `**Notion card:** <ID>`
+3. `**Notion:** …` / `Notion: …`
+
+### Step 3 — Branch handling
+
+```bash
+CURRENT=$(git branch --show-current)
+DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || echo main)
+```
+
+**If `CURRENT == DEFAULT`** — create a feature branch from the plan slug (or description slug in manual mode):
+```bash
+git checkout -b <type>/<slug>
+```
+Print: `Created branch <branch>.`
+
+**If `CURRENT != DEFAULT`** — use the current branch as-is.
+
+### Step 4 — Classify front/back
+
+```bash
+git diff --name-only origin/$DEFAULT...HEAD
+```
+
+Match extensions per `~/.claude/skills/conventions/pr.md`:
+- `frontend` — only `.tsx | .ts | .jsx | .js | .vue | .css | .scss | .html`
+- `backend` — only `.py | .sql` (plus configs)
+- `fullstack` — both
+
+Store the result as `LABEL` for Steps 8 and output.
+
+### Step 5 — Stage and commit
+
+**Plan-mode:** stage only the files from the Critical files table:
+```bash
+git add <file1> <file2> ...
+```
+
+**Manual mode:** stage `git diff --cached` as-is (or add all unstaged if nothing is cached).
+
+Commit with Conventional Commits format per `~/.claude/skills/conventions/pr.md`:
+```bash
+git commit -m "$(cat <<'EOF'
+<type>(<scope>): <description>
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+```
+
+### Step 6 — Push
+
+```bash
+git push -u origin HEAD
+```
+
+Never `--force` or `--no-verify`.
+
+### Step 7 — Create PR (or update existing)
+
+Check for an existing PR:
+```bash
+PR_NUM=$(gh pr view --json number --jq .number 2>/dev/null)
+```
+
+Build title per `~/.claude/skills/conventions/pr.md`:
+- No ticket: `<type>(<scope>): <description>`
+- With ticket: `<type>(<scope>): <description> — <TICKET>`
+
+Build body using the PR body template from the conventions file. For frontend PRs (LABEL = `frontend` or `fullstack`), include a `## Screenshots` section placeholder:
+
+```bash
+gh pr create \
+  --title "<title>" \
+  --body "$(cat <<'EOF'
+## Summary
+<2–3 bullets>
+
+## Test plan
+<GitHub task list; RUN the steps before opening the PR and check the boxes for what passed:>
+- [x] <verification step from the plan that you ran, e.g. tests / build / lint>
+- [ ] <only-post-merge or reviewer-side step — label why it's unchecked>
+
+<!-- FRONTEND: add ## Screenshots section with at least one screenshot, or write "No visual change" -->
+
+Notion: <full URL or ID, omit line if absent>
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+EOF
+)"
+PR_NUM=$(gh pr view --json number --jq .number)
+```
+
+If a PR already exists, skip creation and use the existing `PR_NUM`.
+
+### Step 8 — Apply front/back label
+
+```bash
+# Create label if missing, then apply
+gh label create frontend  --color 0075ca --force
+gh label create backend   --color e4e669 --force
+gh label create fullstack --color d93f0b --force
+gh pr edit "$PR_NUM" --add-label "$LABEL"
+```
+
+### Step 9 — Request Copilot review
+
+```bash
+gh pr edit "$PR_NUM" --add-reviewer @copilot
+```
+
+Note: `@copilot` (with `@`) is the correct alias for `gh`. The REST `/requested_reviewers` endpoint silently no-ops for bots; `@copilot` via `gh pr edit` is the only form that works.
+
+### Step 10 — Auto-merge (only if `--auto-merge` was passed)
+
+```bash
+gh pr merge "$PR_NUM" --auto --squash
+```
+
+Print: `Auto-merge enabled (squash).`
+
+### Step 11 — Output
+
+```
+PR #<N>: <title>
+Branch: <branch>
+Commit: <short sha>
+Label: <frontend|backend|fullstack>
+Reviewer: Copilot requested
+Auto-merge: <enabled | disabled>
+URL: <pr url>
+```
+
+### Step 12 — Cleanup
+
+Delete the review gate marker so it does not accumulate across branches:
+```bash
+rm -f .claude/.review-passed
+```
+
+If the current working directory is inside a worktree (path contains `.claude/worktrees/`), call the `ExitWorktree` tool to remove the worktree and return to the main tree. Do this **after** printing the Step 11 output so the URL is visible before the context switches.
+
+## Common mistakes
+
+- **Skipping the `.review-passed` gate in plan-mode.** Never proceed if the file is missing.
+- **Using `git add .`** instead of staging only Critical files.
+- **Wrong Copilot alias.** Use `@copilot` — not `Copilot`, not `copilot-pull-request-reviewer`.
+- **Committing before reading the full plan.** The commit message must match the plan's intent.
+- **Hardcoding rules in this file.** Naming, labeling, reviewer, screenshot, and ticket rules belong in `~/.claude/skills/conventions/pr.md`.
+- **Omitting the screenshot section on frontend PRs.** Always include the `## Screenshots` placeholder in the body; the author fills it before merging.
+
+## References
+
+- `~/.claude/skills/conventions/pr.md` — all PR naming, labeling, reviewer, and screenshot rules.
+- `../reviewer/SKILL.md` — writes the `.review-passed` marker this skill gates on.
+- `../executor/SKILL.md` — applies the code changes; this skill ships them.
+- `../pr-comments/SKILL.md` — handles bot feedback after the PR is open.
