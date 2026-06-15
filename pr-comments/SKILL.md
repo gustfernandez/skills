@@ -1,6 +1,6 @@
 ---
 name: pr-comments
-description: Use when handling unresolved bot or human review comments on a GitHub PR (in any repository excluding the multiplica monorepo, which has its own multiplica-pr-comments). Analyzes comments, declines inline immediately for items not worth fixing, writes a 6-section plan for fix items, and emits a sidecar JSON for the pr-finalize skill.
+description: Use when handling unresolved bot or human review comments on a GitHub PR. Analyzes comments, declines inline immediately for items not worth fixing, writes a 6-section plan for fix items, and emits a sidecar JSON for the pr-finalize skill.
 ---
 
 # pr-comments
