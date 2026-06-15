@@ -50,13 +50,15 @@ Stop. Do not proceed.
 ### Step 2 — Resolve context
 
 **Plan-mode:**
-Read the most recently modified plan in `~/.claude/plans/` (or the plan passed as argument). Extract:
-- **Plan title** (first `#` heading) → commit message + PR title.
-- **Context section** → PR body summary + Notion card extraction.
+Read the most recently modified plan in `~/.claude/plans/` (or the plan passed as argument). Extract ONLY:
+- **Plan title** (first `#` heading) → commit message + PR title seed (verified against the diff).
+- **Context section** → Notion card extraction.
 - **Critical files table** → exact set of files to stage.
-- **Verification section** → Test plan bullets in PR body.
+- **Verification section** → which checks to RUN; their results become the Test plan boxes.
 - **Commit type** → infer from plan title (`feat` / `fix` / `refactor` / `chore` / `docs` / `test` / `ci`).
 - **Scope** → infer from the app or domain name in the plan title (omit if unclear).
+
+**The PR body is diff-grounded, not plan-derived.** Per `~/.claude/skills/conventions/pr.md`, generate the description from `pr-diff.txt` (Step 7), not from the plan prose, chat, or memory. The plan only supplies title/scope/Notion/which-files above.
 
 If no plan is found, fall back to manual-mode behavior.
 
@@ -134,31 +136,21 @@ Check for an existing PR:
 PR_NUM=$(gh pr view --json number --jq .number 2>/dev/null)
 ```
 
-Build title per `~/.claude/skills/conventions/pr.md`:
+First, generate the diff that grounds the description (BASE resolved per `~/.claude/skills/conventions/pr.md`):
+```bash
+git fetch origin "$BASE"
+git diff origin/"$BASE"...HEAD > pr-diff.txt
+git diff --name-only origin/"$BASE"...HEAD | wc -l   # file count for Technical Details
+```
+
+Build the title (first body line) per `~/.claude/skills/conventions/pr.md`:
 - No ticket: `<type>(<scope>): <description>`
 - With ticket: `<type>(<scope>): <description> — <TICKET>`
 
-Build body using the PR body template from the conventions file. For frontend PRs (LABEL = `frontend` or `fullstack`), include a `## Screenshots` section placeholder:
+Build the body from the **PR body template + grounding rules** in the conventions file — every concrete claim must appear in `pr-diff.txt` or a changed path, ≤ 300 words, `Not evident from diff` where unknown. For frontend PRs (LABEL = `frontend` / `fullstack`) include a `## Screenshots` section.
 
 ```bash
-gh pr create \
-  --title "<title>" \
-  --body "$(cat <<'EOF'
-## Summary
-<2–3 bullets>
-
-## Test plan
-<GitHub task list; RUN the steps before opening the PR and check the boxes for what passed:>
-- [x] <verification step from the plan that you ran, e.g. tests / build / lint>
-- [ ] <only-post-merge or reviewer-side step — label why it's unchecked>
-
-<!-- FRONTEND: add ## Screenshots section with at least one screenshot, or write "No visual change" -->
-
-Notion: <full URL or ID, omit line if absent>
-
-🤖 Generated with [Claude Code](https://claude.ai/code)
-EOF
-)"
+gh pr create --title "<title>" --body "<diff-grounded body per conventions/pr.md>"
 PR_NUM=$(gh pr view --json number --jq .number)
 ```
 
@@ -204,9 +196,9 @@ URL: <pr url>
 
 ### Step 12 — Cleanup
 
-Delete the review gate marker so it does not accumulate across branches:
+Delete the review gate marker and the diff scratch file so they do not accumulate across branches:
 ```bash
-rm -f .claude/.review-passed
+rm -f .claude/.review-passed pr-diff.txt
 ```
 
 If the current working directory is inside a worktree (path contains `.claude/worktrees/`), call the `ExitWorktree` tool to remove the worktree and return to the main tree. Do this **after** printing the Step 11 output so the URL is visible before the context switches.
