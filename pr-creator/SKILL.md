@@ -1,6 +1,6 @@
 ---
 name: pr-creator
-description: Use after /reviewer passes (.review-passed marker exists) to stage, commit, push, create a PR, and request Copilot as reviewer. Pass --auto-merge to enable squash auto-merge. Also supports manual mode (--manual --type <T> --description <D> [--scope <S>] [--notion <X>]) without requiring a .review-passed marker. All naming, labeling, and reviewer rules defer to ~/.claude/skills/conventions/pr.md. Works in any repository except the multiplica monorepo (use multiplica-pr-creator there).
+description: Use after /reviewer passes (.review-passed marker exists) to stage, commit, push, create a PR, and request Copilot as reviewer. Pass --auto-merge to enable squash auto-merge. Also supports manual mode (--manual --type <T> --description <D> [--scope <S>] [--notion <X>]) without requiring a .review-passed marker. All naming and reviewer rules defer to ~/.claude/skills/conventions/pr.md. No front/back GitHub label is applied. Works in any repository except the multiplica monorepo (use multiplica-pr-creator there).
 model: sonnet
 ---
 
@@ -14,10 +14,9 @@ Bridges the gap between a clean reviewer pass and an open PR. In one shot:
 2. Creates a feature branch if currently on the default branch.
 3. Stages the Critical files from the active plan (plan-mode) or `git diff --cached` (manual mode), commits, and pushes.
 4. Creates a GitHub PR with title and body per `~/.claude/skills/conventions/pr.md`.
-5. Detects frontend/backend/fullstack from the diff and applies the matching label.
-6. Requests Copilot as reviewer.
-7. If `--auto-merge` was passed, enables squash auto-merge.
-8. Deletes `.review-passed` and exits the worktree if running inside one.
+5. Requests Copilot as reviewer.
+6. If `--auto-merge` was passed, enables squash auto-merge.
+7. Deletes `.review-passed` and exits the worktree if running inside one.
 
 **Invoking this skill is the explicit user approval** for the commit + push that `executor` deferred. Only invoke when you want to ship the current state.
 
@@ -89,18 +88,18 @@ Print: `Created branch <branch>.`
 
 **If `CURRENT != DEFAULT`** — use the current branch as-is.
 
-### Step 4 — Classify front/back
+### Step 4 — Classify front/back (for the screenshot decision only)
 
 ```bash
 git diff --name-only origin/$DEFAULT...HEAD
 ```
 
-Match extensions per `~/.claude/skills/conventions/pr.md`:
+Match extensions per `~/.claude/skills/conventions/pr.md` to decide whether a `## Screenshots` section is required:
 - `frontend` — only `.tsx | .ts | .jsx | .js | .vue | .css | .scss | .html`
 - `backend` — only `.py | .sql` (plus configs)
 - `fullstack` — both
 
-Store the result as `LABEL` for Steps 8 and output.
+**No GitHub label is applied** — labels are off per `~/.claude/skills/conventions/pr.md`. Use the result only to gate Step 7's Screenshots section.
 
 ### Step 5 — Stage and commit
 
@@ -156,17 +155,7 @@ PR_NUM=$(gh pr view --json number --jq .number)
 
 If a PR already exists, skip creation and use the existing `PR_NUM`.
 
-### Step 8 — Apply front/back label
-
-```bash
-# Create label if missing, then apply
-gh label create frontend  --color 0075ca --force
-gh label create backend   --color e4e669 --force
-gh label create fullstack --color d93f0b --force
-gh pr edit "$PR_NUM" --add-label "$LABEL"
-```
-
-### Step 9 — Request Copilot review
+### Step 8 — Request Copilot review
 
 ```bash
 gh pr edit "$PR_NUM" --add-reviewer @copilot
@@ -174,7 +163,7 @@ gh pr edit "$PR_NUM" --add-reviewer @copilot
 
 Note: `@copilot` (with `@`) is the correct alias for `gh`. The REST `/requested_reviewers` endpoint silently no-ops for bots; `@copilot` via `gh pr edit` is the only form that works.
 
-### Step 10 — Auto-merge (only if `--auto-merge` was passed)
+### Step 9 — Auto-merge (only if `--auto-merge` was passed)
 
 ```bash
 gh pr merge "$PR_NUM" --auto --squash
@@ -182,26 +171,25 @@ gh pr merge "$PR_NUM" --auto --squash
 
 Print: `Auto-merge enabled (squash).`
 
-### Step 11 — Output
+### Step 10 — Output
 
 ```
 PR #<N>: <title>
 Branch: <branch>
 Commit: <short sha>
-Label: <frontend|backend|fullstack>
 Reviewer: Copilot requested
 Auto-merge: <enabled | disabled>
 URL: <pr url>
 ```
 
-### Step 12 — Cleanup
+### Step 11 — Cleanup
 
 Delete the review gate marker and the diff scratch file so they do not accumulate across branches:
 ```bash
 rm -f .claude/.review-passed pr-diff.txt
 ```
 
-If the current working directory is inside a worktree (path contains `.claude/worktrees/`), call the `ExitWorktree` tool to remove the worktree and return to the main tree. Do this **after** printing the Step 11 output so the URL is visible before the context switches.
+If the current working directory is inside a worktree (path contains `.claude/worktrees/`), call the `ExitWorktree` tool to remove the worktree and return to the main tree. Do this **after** printing the Step 10 output so the URL is visible before the context switches.
 
 ## Common mistakes
 
@@ -209,12 +197,13 @@ If the current working directory is inside a worktree (path contains `.claude/wo
 - **Using `git add .`** instead of staging only Critical files.
 - **Wrong Copilot alias.** Use `@copilot` — not `Copilot`, not `copilot-pull-request-reviewer`.
 - **Committing before reading the full plan.** The commit message must match the plan's intent.
-- **Hardcoding rules in this file.** Naming, labeling, reviewer, screenshot, and ticket rules belong in `~/.claude/skills/conventions/pr.md`.
+- **Applying a front/back GitHub label.** Labels are off — never run `gh pr edit --add-label` or `gh label create`. Classification is used only to decide the Screenshots section.
+- **Hardcoding rules in this file.** Naming, reviewer, screenshot, and ticket rules belong in `~/.claude/skills/conventions/pr.md`.
 - **Omitting the screenshot section on frontend PRs.** Always include the `## Screenshots` placeholder in the body; the author fills it before merging.
 
 ## References
 
-- `~/.claude/skills/conventions/pr.md` — all PR naming, labeling, reviewer, and screenshot rules.
+- `~/.claude/skills/conventions/pr.md` — all PR naming, reviewer, and screenshot rules.
 - `../reviewer/SKILL.md` — writes the `.review-passed` marker this skill gates on.
 - `../executor/SKILL.md` — applies the code changes; this skill ships them.
 - `../pr-comments/SKILL.md` — handles bot feedback after the PR is open.

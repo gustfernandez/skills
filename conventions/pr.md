@@ -108,7 +108,10 @@ Priority order when parsing the plan Context or `--notion` flag:
 
 IDs look like `ABC-123`. Omit if absent — never invent one.
 
-## Label / scope mapping by file extension
+## Front/back classification (screenshots only — NO GitHub label)
+
+Do not apply any front/back GitHub label to PRs. This classification exists solely
+to decide whether a `## Screenshots` section is required (see below).
 
 - `.tsx`, `.ts`, `.jsx`, `.js`, `.vue`, `.css`, `.scss`, `.html` → `frontend`
 - `.py`, `.rb`, `.go`, `.java`, `.rs`, `.sql` (plus server config) → `backend`
@@ -122,7 +125,3 @@ Use `@copilot` (with `@`) — the REST `/requested_reviewers` endpoint silently 
 ## Screenshot requirements
 
 Author-scoped. Frontend (`frontend` / `fullstack`) PRs include a `## Screenshots` section with at least one image, or the literal text "No visual change". Backend-only PRs omit it.
-
-## Front/back labels
-
-Author-scoped. Apply exactly one of `frontend` / `backend` / `fullstack` from the diff classification above. Create the label with `gh label create … --force` if missing before applying.

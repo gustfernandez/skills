@@ -92,7 +92,7 @@ If `--halt-on-should-fix` was passed AND Should-fix > 0: **halt** even if Must-f
 
 Read `references/inlined-pr-creator.md` now. Follow that workflow exactly. Pass `--auto-merge` through if the flag was set.
 
-On first pass (no existing PR): create the PR, apply the label, request `@copilot`. Print the PR URL, label, and "Done — re-invoke /orchestrator when Copilot posts review comments." **DONE (round 0).**
+On first pass (no existing PR): create the PR and request `@copilot` (no front/back label — labels are off). Print the PR URL and "Done — re-invoke /orchestrator when Copilot posts review comments." **DONE (round 0).**
 
 On re-entry pass (existing PR detected in Step 7 of pr-creator): push the follow-up commit to the existing branch/PR instead of opening a new one. Print the commit SHA and "Push complete — re-invoke /orchestrator to run pr-finalize after Copilot re-reviews." **DONE (re-entry).**
 

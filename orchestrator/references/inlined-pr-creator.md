@@ -13,9 +13,8 @@ Bridges the gap between a clean reviewer pass and an open PR. In one shot:
 2. Creates a feature branch if currently on the default branch.
 3. Stages the Critical files from the active plan, commits, and pushes.
 4. Creates a GitHub PR with title and body per PR conventions.
-5. Detects frontend/backend/fullstack and applies the matching label.
-6. Requests Copilot as reviewer.
-7. If `--auto-merge` was passed, enables squash auto-merge.
+5. Requests Copilot as reviewer.
+6. If `--auto-merge` was passed, enables squash auto-merge.
 
 **Invoking this stage is the explicit user approval** for the commit + push that executor deferred.
 
@@ -64,18 +63,18 @@ git checkout -b <type>/<slug>
 
 **If `CURRENT != DEFAULT`** — use the current branch as-is.
 
-## Step 4 — Classify front/back
+## Step 4 — Classify front/back (for the screenshot decision only)
 
 ```bash
 git diff --name-only origin/$DEFAULT...HEAD
 ```
 
-Match extensions per PR conventions:
+Match extensions per PR conventions to decide whether a `## Screenshots` section is required:
 - `frontend` — only `.tsx | .ts | .jsx | .js | .vue | .css | .scss | .html`
 - `backend` — only `.py | .sql` (plus configs)
 - `fullstack` — both
 
-Store as `LABEL`.
+**No GitHub label is applied** — labels are off per PR conventions. Use only to gate the Screenshots section.
 
 ## Step 5 — Stage and commit
 
@@ -135,16 +134,7 @@ EOF
 PR_NUM=$(gh pr view --json number --jq .number)
 ```
 
-## Step 8 — Apply front/back label
-
-```bash
-gh label create frontend  --color 0075ca --force
-gh label create backend   --color e4e669 --force
-gh label create fullstack --color d93f0b --force
-gh pr edit "$PR_NUM" --add-label "$LABEL"
-```
-
-## Step 9 — Request Copilot review
+## Step 8 — Request Copilot review
 
 ```bash
 gh pr edit "$PR_NUM" --add-reviewer @copilot
@@ -152,19 +142,18 @@ gh pr edit "$PR_NUM" --add-reviewer @copilot
 
 Note: `@copilot` (with `@`) is the correct alias. REST endpoint silently no-ops for bots.
 
-## Step 10 — Auto-merge (only if `--auto-merge` was passed)
+## Step 9 — Auto-merge (only if `--auto-merge` was passed)
 
 ```bash
 gh pr merge "$PR_NUM" --auto --squash
 ```
 
-## Step 11 — Output
+## Step 10 — Output
 
 ```
 PR #<N>: <title>
 Branch: <branch>
 Commit: <short sha>
-Label: <frontend|backend|fullstack>
 Reviewer: Copilot requested
 Auto-merge: <enabled | disabled>
 URL: <pr url>
@@ -176,4 +165,5 @@ URL: <pr url>
 - **Using `git add .`** instead of staging only Critical files.
 - **Wrong Copilot alias.** Use `@copilot` — not `Copilot`, not `copilot-pull-request-reviewer`.
 - **Omitting the screenshot section on frontend PRs.** Always include the `## Screenshots` placeholder.
-- **Hardcoding rules.** Naming, labeling, reviewer, screenshot, and ticket rules are in `~/.claude/skills/conventions/pr.md`.
+- **Applying a front/back GitHub label.** Labels are off — never run `gh pr edit --add-label` or `gh label create`. Classification gates the Screenshots section only.
+- **Hardcoding rules.** Naming, reviewer, screenshot, and ticket rules are in `~/.claude/skills/conventions/pr.md`.

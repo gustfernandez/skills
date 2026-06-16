@@ -89,10 +89,9 @@ Read `~/.claude/skills/conventions/pr.md` and enforce every rule it defines. Sev
 | rec† | Screenshot present on frontend PRs | PR body has `## Screenshots` section or explicit `No visual change`. Applies when diff touches `.tsx`, `.jsx`, `.vue`, `.html`, `.css`, `.scss`. |
 | should | Ticket / Notion ID not in commit subject | Grep `git log -1` for `MLTPB-\d+` or `notion.so`; verify it's in PR body instead. |
 | should | PR not fullstack (split front/back when possible) | Diff touches both `.py`/`.sql` and `.tsx`/`.ts`/`.vue`/`.css`? |
-| rec† | Front/back label set | `gh pr view --json labels` shows `frontend`, `backend`, or `fullstack`. |
 | nit | Commit type matches the change | `feat` = new functionality, `fix` = bug, `refactor` = restructuring. |
 
-> **† Author-scoped — see `conventions/pr.md`.** The screenshot and front/back label rules apply **only when reviewing your own PR**. When the PR is authored by someone else (especially in a routine), do **not** raise a missing screenshot or missing label at any severity. Check authorship: `gh pr view "$PR_NUM" --json author --jq .author.login` vs `gh api user --jq .login`.
+> **† Author-scoped — see `conventions/pr.md`.** The screenshot rule applies **only when reviewing your own PR**. When the PR is authored by someone else (especially in a routine), do **not** raise a missing screenshot at any severity. Check authorship: `gh pr view "$PR_NUM" --json author --jq .author.login` vs `gh api user --jq .login`.
 
 ---
 

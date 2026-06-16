@@ -41,7 +41,7 @@
   ┌─────────────────────────────────────────────────────────┐
   │  PR-CREATE  (inlined-pr-creator.md)                    │
   │  stage Critical files → commit → push                   │
-  │  gh pr create + label + @copilot                        │
+  │  gh pr create + @copilot  (no label)                    │
   │  [--auto-merge optional]                                │
   └─────────────────────────────────────────────────────────┘
       │
